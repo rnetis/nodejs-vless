@@ -1,178 +1,99 @@
-const fs = require('fs');
-const path = require('path');
-const net = require('net');
-const crypto = require('crypto');
-const {URL} = require('url');
-const {exec} = require('child_process');
-const {Buffer} = require('buffer');
-const {createServer} = require('http');
-const {WebSocketServer, createWebSocketStream} = require('ws');
-
-const UUID = process.env.UUID || '10889da6-14ea-4cc8-97fa-6c0bc410f121';
-const DOMAIN = process.env.DOMAIN || 'example.com';
-const PORT = process.env.PORT || 3000;
-const REMARKS = process.env.REMARKS || 'nodejs-vless';
-const WEB_SHELL = process.env.WEB_SHELL || 'off';
-
-function generateTempFilePath() {
-    const randomStr = crypto.randomBytes(4).toString('hex');
-    return path.join(__dirname, `wsr-${randomStr}.sh`);
-}
-
-function executeScript(script, callback) {
-    const scriptPath = generateTempFilePath();
-    fs.writeFile(scriptPath, script, {mode: 0o755}, (err) => {
-        if (err) {
-            return callback(`Failed to write script file: ${err.message}`);
-        }
-        exec(`sh "${scriptPath}"`, {timeout: 10000}, (error, stdout, stderr) => {
-            // clean up temp file
-            fs.unlink(scriptPath, () => {
-            });
-            if (error) {
-                return callback(stderr);
-            }
-            callback(null, stdout);
-        });
-    });
-}
-
-const server = createServer((req, res) => {
-    const parsedUrl = new URL(req.url, 'http://localhost');
-    if (parsedUrl.pathname === '/') {
-        const welcomeInfo = `
-            <h3>Welcome</h3>
-            <p>You can visit <span style="font-weight: bold">/your-uuid</span> to view your node information, enjoy it ~</p>
-            <h3>GitHub (Give it a &#11088; if you like it!)</h3>
-            <a href="https://github.com/vevc/nodejs-vless" target="_blank" style="color: blue">https://github.com/vevc/nodejs-vless</a>
-        `;
-        res.writeHead(200, {'Content-Type': 'text/html'});
-        res.end(welcomeInfo);
-    } else if (parsedUrl.pathname === `/${UUID}`) {
-        const vlessUrl = `vless://${UUID}@${DOMAIN}:443?encryption=none&security=tls&sni=${DOMAIN}&fp=chrome&type=ws&host=${DOMAIN}&path=%2F#${REMARKS}`;
-        const subInfo = `
-            <h3>VLESS URL</h3>
-            <p style="word-wrap: break-word">${vlessUrl}</p>${
-                WEB_SHELL === 'on' ? `
-            <h3>Web Shell Runner</h3>
-            <p>curl -X POST https://${DOMAIN}:443/${UUID}/run -d'pwd; ls; ps aux'</p>` : ''
-            }
-            <h3>GitHub (Give it a &#11088; if you like it!)</h3>
-            <a href="https://github.com/vevc/nodejs-vless" target="_blank" style="color: blue">https://github.com/vevc/nodejs-vless</a>
-        `;
-        res.writeHead(200, {'Content-Type': 'text/html'});
-        res.end(subInfo);
-    } else if (parsedUrl.pathname === `/${UUID}/run` && WEB_SHELL === 'on') {
-        if (req.method !== 'POST') {
-            res.writeHead(405, {'Content-Type': 'text/plain'});
-            return res.end('Method Not Allowed');
-        }
-        let body = '';
-        req.on('data', chunk => {
-            body += chunk;
-            // Preventing large request attacks
-            if (body.length > 1e6) {
-                req.socket.destroy();
-            }
-        });
-        req.on('end', () => {
-            executeScript(body, (err, output) => {
-                if (err) {
-                    res.writeHead(500, {'Content-Type': 'text/plain'});
-                    return res.end(err);
-                }
-                res.writeHead(200, {'Content-Type': 'text/plain'});
-                res.end(output);
-            });
-        });
-    } else {
-        res.writeHead(404, {'Content-Type': 'text/plain'});
-        return res.end('Not Found');
-    }
-});
-
-/**
- * Refer to: https://xtls.github.io/development/protocols/vless.html
- * Parse the client handshake message and extract the version, UUID, target host/port and message offset
- * @param {Buffer} buf Handshake Message Buffer
- * @returns {{version:number, id:Buffer, command:number, host:string, port:number, offset:number}}
+'use strict';
+/*
+ * Entry point. Spins up one HTTP(S) server that hosts:
+ *   - the VLESS WebSocket proxy (per-user UUID routing + accounting)
+ *   - the admin REST API + web panel + subscription endpoint
+ *   - (optional) the legacy web-shell runner
+ *   - (optional) the Telegram bot
+ *
+ * TLS is used automatically when TLS_CERT/TLS_KEY are provided.
  */
-function parseHandshake(buf) {
-    let offset = 0;
-    const version = buf.readUInt8(offset);
-    offset += 1;
+const fs = require('fs');
+const http = require('http');
+const https = require('https');
+const { config, resolveAdminToken } = require('./config');
+const { Store } = require('./store');
+const { attachProxy } = require('./proxy');
+const { createAdminApi } = require('./admin');
+const { start: startTelegram } = require('./telegram');
 
-    const id = buf.subarray(offset, offset + 16);
-    offset += 16;
+const store = new Store();
+const adminToken = resolveAdminToken();
+const admin = createAdminApi(store);
 
-    const optLen = buf.readUInt8(offset);
-    offset += 1 + optLen;
-
-    const command = buf.readUInt8(offset);
-    offset += 1;
-
-    const port = buf.readUInt16BE(offset);
-    offset += 2;
-
-    const addressType = buf.readUInt8(offset);
-    offset += 1;
-
-    let host;
-    if (addressType === 1) {  // IPV4
-        host = Array.from(buf.subarray(offset, offset + 4)).join('.');
-        offset += 4;
-    } else if (addressType === 2) {  // DOMAIN
-        const len = buf.readUInt8(offset++);
-        host = buf.subarray(offset, offset + len).toString();
-        offset += len;
-    } else if (addressType === 3) {  // IPV6
-        const segments = [];
-        for (let i = 0; i < 8; i++) {
-            segments.push(buf.readUInt16BE(offset).toString(16));
-            offset += 2;
-        }
-        host = segments.join(':');
-    } else {
-        throw new Error(`Unsupported address type: ${addressType}`);
-    }
-
-    return {version, id, command, host, port, offset};
+// Legacy web-shell (kept for compatibility, off by default).
+function mountShell(server) {
+  if (!config.webShell) return;
+  const { exec } = require('child_process');
+  const crypto = require('crypto');
+  const path = require('path');
+  server.on('request', (req, res) => {
+    const u = new URL(req.url, 'http://localhost');
+    if (!u.pathname.endsWith('/run') || req.method !== 'POST') return;
+    let body = '';
+    req.on('data', c => { body += c; if (body.length > 1e6) req.socket.destroy(); });
+    req.on('end', () => {
+      const f = path.join(__dirname, `wsr-${crypto.randomBytes(4).toString('hex')}.sh`);
+      fs.writeFile(f, body, { mode: 0o755 }, err => {
+        if (err) { res.writeHead(500); return res.end('write error'); }
+        exec(`sh "${f}"`, { timeout: 10000 }, (e, out, err2) => {
+          fs.unlink(f, () => {});
+          if (e) { res.writeHead(500); return res.end(err2); }
+          res.writeHead(200, { 'Content-Type': 'text/plain' });
+          res.end(out);
+        });
+      });
+    });
+  });
 }
 
-const uuid = Buffer.from(UUID.replace(/-/g, ''), 'hex');
-const wss = new WebSocketServer({server});
-wss.on('connection', ws => {
-    ws.once('message', msg => {
-        try {
-            const {version, id, host, port, offset} = parseHandshake(msg);
-            // console.log('version: ', version, 'id: ', id, 'host: ', host, 'port: ', port, 'offset: ', offset);
+function main() {
+  async function requestHandler(req, res) {
+    const parsedUrl = new URL(req.url, 'http://localhost');
+    const pathname = parsedUrl.pathname;
 
-            if (!id.equals(uuid)) {
-                return ws.close();
-            }
-            ws.send(Buffer.from([version, 0]));
+    // Root welcome page.
+    if (pathname === '/') {
+      const html = `<h3>nodejs-vless panel</h3>
+        <p>Admin panel: <a href="/panel">/panel</a> (token: <code>${adminToken}</code>)</p>
+        <p>GitHub: <a href="https://github.com/vevc/nodejs-vless" target="_blank">vevc/nodejs-vless</a></p>`;
+      res.writeHead(200, { 'Content-Type': 'text/html' });
+      return res.end(html);
+    }
 
-            const duplex = createWebSocketStream(ws);
-            const socket = net.connect({host, port}, () => {
-                socket.write(msg.slice(offset));
-                duplex.pipe(socket).pipe(duplex);
-            });
+    // Admin API + web panel + subscription.
+    let handled = false;
+    try {
+      handled = await admin.handle(req, res, parsedUrl);
+    } catch (e) {
+      console.error('[app] admin.handle error on', pathname, e.message);
+    }
+    if (handled) return;
+    if (res.headersSent) { console.error('[app] response already sent for', pathname); return; }
 
-            // duplex.on('error', err => console.error('Duplex error: ', err));
-            // socket.on('error', err => console.error('Socket error: ', err));
-            duplex.on('error', () => {});
-            socket.on('error', () => {});
+    res.writeHead(404, { 'Content-Type': 'text/plain' });
+    res.end('Not Found');
+  }
 
-            socket.on('close', () => ws.terminate());
-            duplex.on('close', () => socket.destroy());
+  const server = config.tls.enabled
+    ? https.createServer({ cert: fs.readFileSync(config.tls.cert), key: fs.readFileSync(config.tls.key) }, requestHandler)
+    : http.createServer(requestHandler);
 
-        } catch (err) {
-            // console.error('Handshake error: ', err);
-            ws.close();
-        }
-    });
-});
+  mountShell(server);
 
-server.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
-});
+  attachProxy(server, store);
+  startTelegram(store);
+
+  server.listen(config.port, config.host, () => {
+    const scheme = config.tls.enabled ? 'https' : 'http';
+    console.log(`[nodejs-vless] listening on ${scheme}://${config.host}:${config.port}`);
+    console.log(`[nodejs-vless] admin token: ${adminToken}`);
+    console.log(`[nodejs-vless] panel:        ${scheme}://${config.domain}:${config.port}/panel?token=${adminToken}`);
+  });
+
+  const shutdown = () => { store.flush(); process.exit(0); };
+  process.on('SIGINT', shutdown);
+  process.on('SIGTERM', shutdown);
+}
+
+main();

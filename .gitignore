@@ -1,0 +1,8 @@
+node_modules/
+data/
+*.tmp
+wsr-*.sh
+*.log
+.DS_Store
+
+ws.tgz

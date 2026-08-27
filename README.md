@@ -1,71 +1,146 @@
-# VLESS WebSocket 服务端 & Shell API 执行器
+# nodejs-vless — with multi-user panel
 
-本项目是一个基于 Node.js + WebSocket 协议实现的轻量级 VLESS 代理服务端，支持通过 Web API 执行 Shell 脚本，适用于自建代理和远程脚本执行场景。
+[![fork of vevc/nodejs-vless](https://img.shields.io/badge/fork%20of-vevc%2Fnodejs--vless-blue)](https://github.com/vevc/nodejs-vless)
 
-## ✨ 功能特点
+A lightweight **VLESS over WebSocket** proxy (Node.js), evolved with a
+**multi-user management panel**: per-user traffic accounting, expiry dates,
+data limits, an admin REST API, a web panel, and a **Telegram bot**.
 
-- ✅ 支持 VLESS 协议，兼容主流代理客户端
-- 🌐 通过 WebSocket + TLS 实现加密传输
-- 🔐 支持 UUID 鉴权机制
-- 🖥 提供 Web API 接口，远程执行 Shell 脚本
-- 📎 简单易用，环境变量配置灵活
+> Original repo: https://github.com/vevc/nodejs-vless — this fork adds user
+> management on top of the same VLESS/WSS protocol implementation.
 
-## 📦 环境变量配置
+## ✨ Features
 
-| 变量名      | 说明                                                | 默认值                                 |
-| ----------- | --------------------------------------------------- | -------------------------------------- |
-| `UUID`      | VLESS 的认证密钥                                    | `10889da6-14ea-4cc8-97fa-6c0bc410f121` |
-| `DOMAIN`    | 访问的域名（用于客户端配置）                        | `example.com`                          |
-| `PORT`      | 服务启动的端口号                                    | `3000`                                 |
-| `REMARKS`   | 节点备注                                            | `nodejs-vless`                         |
-| `WEB_SHELL` | 是否启用 Web Shell（**on** : 启用，**off** : 禁用） | `off`                                  |
+- ✅ VLESS protocol over WebSocket (compatible with V2Ray / NekoBox / Shadowrocket / etc.)
+- ✅ **Per-user UUID routing** — every client gets its own UUID
+- 📊 **Traffic accounting** — up/down bytes counted live per user (saved to disk)
+- ⏰ **Expiration** — disable a user automatically after a date
+- 📦 **Data usage limits** — cap each user by GB; over-limit connections are dropped
+- 🌐 **Web panel** — create / list / enable / disable / reset / delete users, see live stats
+- 🔌 **Subscription endpoint** — `/sub/<uuid>` returns a base64 `vless://` link
+- 🤖 **Telegram bot** — admin-only commands (`/add`, `/list`, `/off`, `/stats`, …)
+- 🔐 Admin API protected by a Bearer token (auto-generated if not set)
+- 🔒 Optional TLS (provide `TLS_CERT` / `TLS_KEY`) and optional legacy web-shell
 
-## ⚡️ 快速部署
-
-```bash
-wget https://raw.githubusercontent.com/vevc/nodejs-vless/refs/heads/main/app.js
-wget https://raw.githubusercontent.com/vevc/nodejs-vless/refs/heads/main/package.json
-npm install
-PORT=3000 UUID=your-uuid DOMAIN=your-domain.com WEB_SHELL=on node app.js
-```
-
-⚠️ 注意：请妥善保管你的 UUID
-
-## 📡 节点信息查看
-
-打开浏览器访问：
-
-```
-http://your-domain.com:3000/your-uuid
-```
-
-## 🔧 Shell 脚本远程执行
-
-你可以通过以下方式执行脚本指令：
-
-### 请求方式
-
-```
-POST http://your-domain.com:3000/your-uuid/run
-```
-
-### 示例请求：
+## 📦 Install
 
 ```bash
-curl -X POST http://your-domain.com:3000/10889da6-14ea-4cc8-97fa-6c0bc410f121/run -d '
-  ps aux
-  export PROJECT=nodejs-vless
-  echo $PROJECT
-'
+git clone https://github.com/<you>/nodejs-vless
+cd nodejs-vless
+npm install          # installs ws@^8
+node app.js
 ```
 
-## 🛡 安全建议
+> `npm install` needs a working npm. If you only have `ws`, drop it into
+> `node_modules/ws` and run `node app.js` directly.
 
-- 启动时请更改默认 UUID，并妥善保管
-- 推荐部署 TLS 并启用防火墙限制请求来源
-- Web API 提供强大权限，建议使用认证反向代理保护接口
+## ⚙️ Environment variables
 
-## 📜 许可证
+| Variable | Description | Default |
+| --- | --- | --- |
+| `PORT` | HTTP(S) listen port | `3000` |
+| `HOST` | Bind address | `0.0.0.0` |
+| `DOMAIN` | Public domain used in generated links | `example.com` |
+| `REMARKS` | Fallback node remark | `nodejs-vless` |
+| `VLESS_PATH` | WebSocket path used in links | `/` |
+| `DATA_FILE` | User database JSON path | `./data/users.json` |
+| `ADMIN_TOKEN` | Master token for API + panel. Empty ⇒ auto-generated & saved to `<dataDir>/admin.token` | auto |
+| `WEB_PANEL` | Show web panel (`on`/`off`) | `on` |
+| `WEB_SHELL` | Legacy shell runner (`on`/`off`) | `off` |
+| `TLS` | Use TLS | `off` |
+| `TLS_CERT` / `TLS_KEY` | PEM cert/key paths (enables TLS) | — |
+| `BOT_TOKEN` | Telegram bot token (enables bot) | — |
+| `ADMIN_TELEGRAM_ID` | Comma-separated chat ids allowed to use the bot | all if empty |
+| `TG_POLL` | Bot long-poll interval (ms) | `1500` |
 
-本项目采用 MIT 许可证，欢迎学习与贡献，禁止非法用途。
+## 🚀 Run
 
+```bash
+PORT=3000 DOMAIN=your.domain.com \
+ADMIN_TOKEN=change-me \
+BOT_TOKEN=123456:ABC-your-token \
+ADMIN_TELEGRAM_ID=987654321 \
+node app.js
+```
+
+On first boot (if `ADMIN_TOKEN` is empty) a token is printed:
+
+```
+[nodejs-vless] admin token: a1b2c3…e9f0
+[nodejs-vless] panel:        http://your.domain.com:3000/panel?token=a1b2c3…e9f0
+```
+
+## 🖥 Web panel
+
+Open `/panel?token=<ADMIN_TOKEN>`. From there you can:
+
+- add a user (remark, expiry in days, data cap in GB),
+- copy its subscription link,
+- enable / disable / reset / delete users,
+- watch aggregate traffic and active-user counts.
+
+## 📡 Subscription link
+
+Each user has a subscription endpoint:
+
+```
+GET /sub/<uuid>
+```
+
+It returns a base64-encoded `vless://` link you can paste into any VLESS client
+(or import as a subscription). Example decoded link:
+
+```
+vless://<uuid>@your.domain.com:443?encryption=none&security=tls&sni=your.domain.com&fp=chrome&type=ws&host=your.domain.com&path=%2F#remark
+```
+
+## 🤖 Telegram bot
+
+Set `BOT_TOKEN` (and optionally `ADMIN_TELEGRAM_ID`). Commands:
+
+| Command | Action |
+| --- | --- |
+| `/start` `/help` | Show help |
+| `/stats` | Totals: users, active, traffic |
+| `/list` | List users with status + usage |
+| `/add <remark> <days> <GB>` | Create a user |
+| `/del <uuid|remark>` | Delete a user |
+| `/on <uuid|remark>` | Enable a user |
+| `/off <uuid|remark>` | Disable a user |
+| `/reset <uuid|remark>` | Reset traffic counters |
+| `/info <uuid|remark>` | Show detail + `vless://` link |
+
+Only chat ids in `ADMIN_TELEGRAM_ID` may control the bot (or everyone if unset).
+
+## 🔌 Admin REST API
+
+All routes (except `/panel` and `/sub/:uuid`) require
+`Authorization: Bearer <ADMIN_TOKEN>` or `?token=<ADMIN_TOKEN>`.
+
+| Method | Path | Description |
+| --- | --- | --- |
+| `GET` | `/api/stats` | Aggregate stats |
+| `GET` | `/api/users` | List users |
+| `POST` | `/api/users` | Create: `{remark, expiryDays, dataLimitGB}` |
+| `GET` | `/api/users/:uuid` | Get a user |
+| `PUT` | `/api/users/:uuid` | Update: `{remark, enabled, expiryDays, dataLimitGB}` |
+| `DELETE` | `/api/users/:uuid` | Delete a user |
+| `POST` | `/api/users/:uuid/reset` | Reset traffic |
+
+## 🧪 Tests
+
+```bash
+npm test                 # API + store + handshake unit/integration tests
+node test.proxy.js       # real VLESS handshake + traffic accounting + expiry/disable
+```
+
+## 🛡 Security notes
+
+- Change the default `ADMIN_TOKEN`; the API is powerful.
+- Keep `WEB_SHELL=off` unless you absolutely need it (it executes shell as the
+  node process user).
+- Put the service behind a reverse proxy with TLS and firewall the ports.
+
+## 📜 License
+
+MIT — same as the upstream project. Contributions welcome.

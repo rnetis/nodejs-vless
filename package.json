@@ -1,15 +1,19 @@
 {
   "name": "nodejs-vless",
-  "description": "Lightweight VLESS proxy using Node.js and WebSocket.",
-  "version": "1.0.0",
+  "description": "Lightweight VLESS proxy with multi-user panel: traffic accounting, expiry, data limits, admin API, web panel and Telegram bot.",
+  "version": "2.0.0",
   "main": "app.js",
   "scripts": {
-    "start": "node app.js"
+    "start": "node app.js",
+    "test": "node test.js"
   },
   "keywords": [
     "vless",
     "tunnel",
-    "proxy"
+    "proxy",
+    "panel",
+    "telegram",
+    "subscription"
   ],
   "repository": {
     "type": "git",

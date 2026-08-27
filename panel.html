@@ -1,155 +1,573 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>nodejs-vless · Admin Panel</title>
+<title>nodejs-vless · Control</title>
 <style>
-  :root { --bg:#0f1115; --card:#181b22; --fg:#e6e8ec; --muted:#8b93a1; --accent:#3b82f6; --border:#262b34; --ok:#22c55e; --warn:#f59e0b; --bad:#ef4444; }
+  /* ---------- design tokens ---------- */
+  :root {
+    --bg: #0b0d12;
+    --bg-grid: rgba(255,255,255,.018);
+    --surface: #11141b;
+    --surface-2: #161a23;
+    --surface-3: #1c2130;
+    --ink: #e7ebf2;
+    --muted: #8a93a6;
+    --faint: #5c6678;
+    --border: #232a37;
+    --border-soft: #1a2030;
+    --accent: #4f8cff;
+    --accent-soft: rgba(79,140,255,.14);
+    --accent-ink: #acd0ff;
+    --ok: #3ddc97;
+    --ok-soft: rgba(61,220,151,.13);
+    --warn: #ffb454;
+    --warn-soft: rgba(255,180,84,.13);
+    --bad: #ff6b6b;
+    --bad-soft: rgba(255,107,107,.13);
+    --mono: ui-monospace, "SF Mono", "JetBrains Mono", "Cascadia Code", Menlo, Consolas, monospace;
+    --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --r-s: 8px; --r-m: 12px; --r-l: 16px;
+    --shadow: 0 18px 50px -18px rgba(0,0,0,.7);
+    --ring: 0 0 0 3px var(--accent-soft);
+  }
+  [data-theme="light"] {
+    --bg: #f4f6fb; --bg-grid: rgba(0,0,0,.02);
+    --surface: #ffffff; --surface-2: #f7f9fd; --surface-3: #eef2f8;
+    --ink: #131722; --muted: #5c6678; --faint: #97a0b2;
+    --border: #e2e7f0; --border-soft: #eef1f7;
+    --accent: #2f6bff; --accent-soft: rgba(47,107,255,.12); --accent-ink: #1e4fd0;
+    --shadow: 0 18px 44px -22px rgba(31,45,80,.45);
+  }
+
   * { box-sizing: border-box; }
-  body { margin:0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial; background:var(--bg); color:var(--fg); }
-  header { padding:16px 20px; border-bottom:1px solid var(--border); display:flex; align-items:center; gap:12px; }
-  header h1 { font-size:16px; margin:0; font-weight:600; }
-  header .tok { font-size:12px; color:var(--muted); }
-  .wrap { padding:20px; max-width:1100px; margin:0 auto; }
-  .cards { display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:12px; margin-bottom:20px; }
-  .card { background:var(--card); border:1px solid var(--border); border-radius:12px; padding:14px; }
-  .card .v { font-size:22px; font-weight:700; }
-  .card .l { font-size:12px; color:var(--muted); margin-top:4px; }
-  .toolbar { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:14px; align-items:end; }
-  .toolbar input { background:#0b0d12; border:1px solid var(--border); color:var(--fg); padding:8px 10px; border-radius:8px; }
-  button { background:var(--accent); color:#fff; border:0; padding:8px 14px; border-radius:8px; cursor:pointer; font-weight:600; }
-  button.ghost { background:transparent; border:1px solid var(--border); color:var(--fg); }
-  button.danger { background:var(--bad); }
-  table { width:100%; border-collapse:collapse; background:var(--card); border:1px solid var(--border); border-radius:12px; overflow:hidden; }
-  th,td { text-align:left; padding:10px 12px; font-size:13px; border-bottom:1px solid var(--border); }
-  th { color:var(--muted); font-weight:600; }
-  tr:last-child td { border-bottom:0; }
-  .pill { display:inline-block; padding:2px 8px; border-radius:999px; font-size:11px; font-weight:600; }
-  .pill.on { background:rgba(34,197,94,.15); color:var(--ok); }
-  .pill.off { background:rgba(239,68,68,.15); color:var(--bad); }
-  .pill.exp { background:rgba(245,158,11,.15); color:var(--warn); }
-  code { background:#0b0d12; padding:2px 6px; border-radius:6px; font-size:12px; }
-  .row-actions { display:flex; gap:6px; }
-  .modal { position:fixed; inset:0; background:rgba(0,0,0,.55); display:none; align-items:center; justify-content:center; }
-  .modal.show { display:flex; }
-  .modal .box { background:var(--card); border:1px solid var(--border); border-radius:14px; padding:20px; width:380px; }
-  .modal label { display:block; font-size:12px; color:var(--muted); margin:10px 0 4px; }
-  .modal .box input { width:100%; }
-  .modal .actions { display:flex; gap:8px; justify-content:flex-end; margin-top:16px; }
-  .hidden { display:none; }
+  html, body { height: 100%; }
+  body {
+    margin: 0; font-family: var(--sans); background: var(--bg); color: var(--ink);
+    background-image: radial-gradient(var(--bg-grid) 1px, transparent 1px);
+    background-size: 22px 22px;
+    -webkit-font-smoothing: antialiased;
+    display: grid; grid-template-columns: 248px 1fr;
+    grid-template-rows: 100%;
+    min-height: 100vh;
+  }
+
+  /* ---------- sidebar ---------- */
+  .side {
+    border-right: 1px solid var(--border-soft); background: var(--surface);
+    padding: 18px 14px; display: flex; flex-direction: column; gap: 6px;
+    position: sticky; top: 0; height: 100vh;
+  }
+  .brand { display: flex; align-items: center; gap: 11px; padding: 6px 8px 14px; }
+  .brand .logo {
+    width: 34px; height: 34px; border-radius: 10px; flex: none;
+    background: linear-gradient(140deg, var(--accent), #8a5cff);
+    display: grid; place-items: center; color: #fff; font-weight: 800; font-size: 15px;
+    box-shadow: 0 6px 18px -6px var(--accent);
+  }
+  .brand b { font-size: 14.5px; letter-spacing: .2px; }
+  .brand small { color: var(--muted); font-size: 11px; display: block; font-weight: 500; }
+  .nav { display: flex; flex-direction: column; gap: 3px; margin-top: 4px; }
+  .nav button {
+    all: unset; cursor: pointer; display: flex; align-items: center; gap: 11px;
+    padding: 9px 11px; border-radius: var(--r-s); color: var(--muted);
+    font-size: 13.5px; font-weight: 550; transition: background .15s, color .15s;
+  }
+  .nav button:hover { background: var(--surface-2); color: var(--ink); }
+  .nav button.active { background: var(--accent-soft); color: var(--accent-ink); }
+  .nav svg { width: 17px; height: 17px; flex: none; }
+  .side-foot { margin-top: auto; padding: 10px 8px 2px; border-top: 1px solid var(--border-soft); font-size: 11px; color: var(--faint); }
+  .side-foot .tok { display: flex; align-items: center; gap: 6px; margin-top: 8px; }
+  .side-foot code { font-family: var(--mono); font-size: 10.5px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  /* ---------- main ---------- */
+  .main { padding: 26px 30px 40px; overflow: auto; }
+  .topbar { display: flex; align-items: center; gap: 14px; margin-bottom: 22px; }
+  .topbar h1 { font-size: 20px; margin: 0; letter-spacing: -.2px; }
+  .topbar .sub { color: var(--muted); font-size: 12.5px; margin-top: 3px; }
+  .spacer { flex: 1; }
+  .btn {
+    all: unset; cursor: pointer; border: 1px solid var(--border); background: var(--surface);
+    color: var(--ink); padding: 9px 14px; border-radius: var(--r-s); font-size: 13px; font-weight: 600;
+    transition: border-color .15s, background .15s, transform .05s;
+  }
+  .btn:hover { border-color: var(--faint); }
+  .btn:active { transform: translateY(1px); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; box-shadow: 0 8px 22px -10px var(--accent); }
+  .btn.primary:hover { filter: brightness(1.06); }
+  .btn.danger { color: var(--bad); border-color: var(--bad-soft); background: var(--bad-soft); }
+  .btn.ghost { background: transparent; }
+  .btn.sm { padding: 6px 10px; font-size: 12px; }
+  .iconbtn { all: unset; cursor: pointer; width: 34px; height: 34px; display: grid; place-items: center; border-radius: var(--r-s); border: 1px solid var(--border); color: var(--muted); }
+  .iconbtn:hover { color: var(--ink); border-color: var(--faint); }
+  .iconbtn svg { width: 16px; height: 16px; }
+
+  /* ---------- stat cards ---------- */
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 22px; }
+  .stat { background: var(--surface); border: 1px solid var(--border-soft); border-radius: var(--r-m); padding: 16px 16px 14px; position: relative; overflow: hidden; }
+  .stat .k { font-size: 11.5px; color: var(--muted); font-weight: 600; letter-spacing: .3px; text-transform: uppercase; }
+  .stat .v { font-family: var(--mono); font-size: 26px; font-weight: 600; margin-top: 8px; letter-spacing: -.5px; }
+  .stat .v small { font-size: 13px; color: var(--faint); font-weight: 500; }
+  .stat .spark { position: absolute; right: 12px; top: 14px; color: var(--accent); opacity: .8; }
+
+  /* ---------- toolbar ---------- */
+  .toolbar { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+  .search { position: relative; flex: 1; max-width: 360px; }
+  .search svg { position: absolute; left: 11px; top: 50%; transform: translateY(-50%); width: 15px; height: 15px; color: var(--faint); }
+  .search input { width: 100%; background: var(--surface); border: 1px solid var(--border); color: var(--ink); padding: 9px 12px 9px 34px; border-radius: var(--r-s); font-size: 13px; }
+  .search input:focus { outline: none; border-color: var(--accent); box-shadow: var(--ring); }
+  .seg { display: flex; border: 1px solid var(--border); border-radius: var(--r-s); overflow: hidden; }
+  .seg button { all: unset; cursor: pointer; padding: 8px 12px; font-size: 12.5px; color: var(--muted); font-weight: 600; }
+  .seg button.on { background: var(--surface-3); color: var(--ink); }
+
+  /* ---------- table ---------- */
+  .table-wrap { background: var(--surface); border: 1px solid var(--border-soft); border-radius: var(--r-m); overflow: hidden; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  thead th { text-align: left; padding: 12px 16px; color: var(--muted); font-weight: 600; font-size: 11.5px; text-transform: uppercase; letter-spacing: .4px; border-bottom: 1px solid var(--border-soft); background: var(--surface-2); }
+  tbody td { padding: 13px 16px; border-bottom: 1px solid var(--border-soft); vertical-align: middle; }
+  tbody tr:last-child td { border-bottom: 0; }
+  tbody tr { transition: background .12s; cursor: pointer; }
+  tbody tr:hover { background: var(--surface-2); }
+  .u-remark { font-weight: 600; }
+  .u-remark .u-uuid { font-family: var(--mono); font-size: 11px; color: var(--faint); font-weight: 400; margin-top: 2px; word-break: break-all; }
+  .mono { font-family: var(--mono); }
+  .num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+
+  /* usage bar */
+  .bar { height: 6px; border-radius: 99px; background: var(--surface-3); overflow: hidden; min-width: 90px; }
+  .bar > i { display: block; height: 100%; border-radius: 99px; background: var(--accent); transition: width .4s ease; }
+  .bar.warn > i { background: var(--warn); }
+  .bar.bad > i { background: var(--bad); }
+  .usage { display: flex; align-items: center; gap: 10px; }
+  .usage .lbl { font-size: 11.5px; color: var(--muted); white-space: nowrap; }
+
+  /* pills */
+  .pill { display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px; border-radius: 99px; font-size: 11.5px; font-weight: 650; }
+  .pill::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+  .pill.active { color: var(--ok); background: var(--ok-soft); }
+  .pill.disabled { color: var(--faint); background: var(--surface-3); }
+  .pill.expired { color: var(--bad); background: var(--bad-soft); }
+  .pill.quota { color: var(--warn); background: var(--warn-soft); }
+
+  .row-actions { display: flex; gap: 6px; }
+  .row-actions .btn.sm { padding: 6px 9px; }
+
+  /* ---------- drawer ---------- */
+  .scrim { position: fixed; inset: 0; background: rgba(0,0,0,.5); opacity: 0; pointer-events: none; transition: opacity .2s; z-index: 40; }
+  .scrim.show { opacity: 1; pointer-events: auto; }
+  .drawer { position: fixed; top: 0; right: 0; height: 100vh; width: 420px; max-width: 92vw; background: var(--surface); border-left: 1px solid var(--border); box-shadow: var(--shadow); transform: translateX(100%); transition: transform .26s cubic-bezier(.2,.8,.2,1); z-index: 50; display: flex; flex-direction: column; }
+  .drawer.show { transform: translateX(0); }
+  .drawer header { padding: 18px 20px; border-bottom: 1px solid var(--border-soft); display: flex; align-items: center; gap: 12px; }
+  .drawer header h3 { margin: 0; font-size: 16px; }
+  .drawer .body { padding: 20px; overflow: auto; display: flex; flex-direction: column; gap: 18px; }
+  .field { display: flex; flex-direction: column; gap: 6px; }
+  .field label { font-size: 12px; color: var(--muted); font-weight: 600; }
+  .field input, .field select { background: var(--surface-2); border: 1px solid var(--border); color: var(--ink); padding: 10px 12px; border-radius: var(--r-s); font-size: 13.5px; font-family: var(--sans); }
+  .field input:focus, .field select:focus { outline: none; border-color: var(--accent); box-shadow: var(--ring); }
+  .kv { display: grid; grid-template-columns: 110px 1fr; gap: 8px 12px; font-size: 13px; }
+  .kv .k { color: var(--muted); }
+  .kv .v { font-family: var(--mono); font-size: 12.5px; word-break: break-all; }
+  .sublink { margin-top: 4px; display: flex; flex-direction: column; gap: 8px; }
+  .sublink .row { display: flex; gap: 8px; align-items: center; }
+  .sublink input { flex: 1; background: var(--surface-2); border: 1px solid var(--border); color: var(--muted); padding: 9px 10px; border-radius: var(--r-s); font-family: var(--mono); font-size: 11.5px; }
+  .drawer .foot { margin-top: auto; padding: 16px 20px; border-top: 1px solid var(--border-soft); display: flex; gap: 8px; }
+
+  /* ---------- modal ---------- */
+  .modal { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; z-index: 60; background: rgba(0,0,0,.5); }
+  .modal.show { display: flex; }
+  .modal .box { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-l); padding: 22px; width: 400px; max-width: 92vw; box-shadow: var(--shadow); }
+  .modal h3 { margin: 0 0 16px; font-size: 16px; }
+  .modal .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .modal .actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 20px; }
+
+  /* ---------- toasts ---------- */
+  .toasts { position: fixed; bottom: 20px; right: 20px; display: flex; flex-direction: column; gap: 10px; z-index: 70; }
+  .toast { background: var(--surface-3); border: 1px solid var(--border); color: var(--ink); padding: 12px 15px; border-radius: var(--r-m); font-size: 13px; box-shadow: var(--shadow); display: flex; align-items: center; gap: 10px; min-width: 240px; transform: translateY(12px); opacity: 0; transition: all .25s; }
+  .toast.show { transform: translateY(0); opacity: 1; }
+  .toast.ok { border-left: 3px solid var(--ok); }
+  .toast.err { border-left: 3px solid var(--bad); }
+
+  /* ---------- command palette ---------- */
+  .palette { position: fixed; inset: 0; display: none; align-items: flex-start; justify-content: center; z-index: 80; background: rgba(0,0,0,.4); padding-top: 14vh; }
+  .palette.show { display: flex; }
+  .palette .box { width: 560px; max-width: 92vw; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-l); box-shadow: var(--shadow); overflow: hidden; }
+  .palette input { width: 100%; border: 0; border-bottom: 1px solid var(--border-soft); background: transparent; color: var(--ink); padding: 16px 18px; font-size: 15px; }
+  .palette input:focus { outline: none; }
+  .palette .res { max-height: 320px; overflow: auto; }
+  .palette .res .item { padding: 12px 18px; font-size: 13.5px; cursor: pointer; display: flex; gap: 10px; align-items: center; }
+  .palette .res .item.sel, .palette .res .item:hover { background: var(--accent-soft); color: var(--accent-ink); }
+
+  .empty { padding: 50px 20px; text-align: center; color: var(--muted); }
+  .empty svg { width: 40px; height: 40px; opacity: .4; margin-bottom: 10px; }
+  .hidden { display: none !important; }
+
+  @media (max-width: 860px) {
+    body { grid-template-columns: 1fr; }
+    .side { display: none; }
+    .stats { grid-template-columns: repeat(2, 1fr); }
+    .main { padding: 18px; }
+  }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 </style>
 </head>
 <body>
-<header>
-  <h1>nodejs-vless</h1>
-  <span class="tok">Admin Token: <code id="tok"></code></span>
-  <span style="flex:1"></span>
-  <button class="ghost" id="logout">Set token</button>
-</header>
-<div class="wrap">
-  <div class="cards" id="cards"></div>
-  <div class="toolbar">
-    <button id="add">+ Add user</button>
-    <input id="remark" placeholder="remark" />
-    <input id="days" placeholder="expiry days" type="number" />
-    <input id="gb" placeholder="data limit GB" type="number" />
-    <button class="ghost" id="refresh">Refresh</button>
-  </div>
-  <table>
-    <thead><tr><th>Remark</th><th>UUID</th><th>Status</th><th>Traffic</th><th>Expiry</th><th>Last seen</th><th>Link</th><th></th></tr></thead>
-    <tbody id="rows"></tbody>
-  </table>
-</div>
 
-<div class="modal" id="m">
+<!-- SIDEBAR -->
+<aside class="side">
+  <div class="brand">
+    <div class="logo">V</div>
+    <div><b>nodejs-vless</b><small>control panel</small></div>
+  </div>
+  <nav class="nav">
+    <button data-view="users" class="active">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 19c.6-3.4 3-5 5.5-5s4.9 1.6 5.5 5"/><path d="M16 6.5a3 3 0 0 1 0 5.8M20.5 19c-.4-2.3-1.8-3.6-3.5-4.2"/></svg>
+      Users
+    </button>
+    <button data-view="stats">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19V5M4 19h16M8 15l3-4 3 2 4-6"/></svg>
+      Overview
+    </button>
+    <button id="nav-add">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+      Add user
+    </button>
+  </nav>
+  <div class="side-foot">
+    <div>Admin token</div>
+    <div class="tok"><code id="tok-side">••••</code></div>
+  </div>
+</aside>
+
+<!-- MAIN -->
+<main class="main">
+  <div class="topbar">
+    <div>
+      <h1 id="view-title">Users</h1>
+      <div class="sub" id="view-sub">Manage client access, quotas and traffic.</div>
+    </div>
+    <div class="spacer"></div>
+    <button class="iconbtn" id="btn-theme" title="Toggle theme">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+    </button>
+    <button class="iconbtn" id="btn-cmd" title="Command palette (⌘K)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 9v6M11 9h2a2 2 0 0 1 0 4h-2"/></svg>
+    </button>
+    <button class="btn primary" id="btn-add">+ Add user</button>
+  </div>
+
+  <!-- STATS (overview) -->
+  <section id="view-stats" class="hidden">
+    <div class="stats" id="stat-cards"></div>
+    <div class="table-wrap" style="padding:18px">
+      <h3 style="margin:0 0 12px;font-size:14px">Traffic distribution</h3>
+      <div id="dist"></div>
+    </div>
+  </section>
+
+  <!-- USERS -->
+  <section id="view-users">
+    <div class="stats" id="stat-cards-2"></div>
+    <div class="toolbar">
+      <div class="search">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3-3"/></svg>
+        <input id="q" placeholder="Search remark or uuid…" />
+      </div>
+      <div class="seg" id="filter">
+        <button class="on" data-f="all">All</button>
+        <button data-f="active">Active</button>
+        <button data-f="expired">Expired</button>
+        <button data-f="disabled">Disabled</button>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr>
+          <th>Client</th><th>Status</th><th>Traffic</th><th>Data limit</th><th>Expiry</th><th>Last seen</th><th></th>
+        </tr></thead>
+        <tbody id="rows"></tbody>
+      </table>
+      <div id="empty" class="empty hidden">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 19c.6-3.4 3-5 5.5-5s4.9 1.6 5.5 5"/><path d="M16 6.5a3 3 0 0 1 0 5.8M20.5 19c-.4-2.3-1.8-3.6-3.5-4.2"/></svg>
+        <div>No users yet. Click <b>+ Add user</b> to create one.</div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<!-- DRAWER (detail / edit) -->
+<div class="scrim" id="scrim"></div>
+<aside class="drawer" id="drawer">
+  <header>
+    <h3 id="d-title">User</h3>
+    <div class="spacer"></div>
+    <button class="iconbtn" id="d-close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+  </header>
+  <div class="body" id="d-body"></div>
+  <div class="foot">
+    <button class="btn ghost danger" id="d-del">Delete</button>
+    <div class="spacer"></div>
+    <button class="btn" id="d-save">Save changes</button>
+  </div>
+</aside>
+
+<!-- MODAL (add) -->
+<div class="modal" id="modal">
   <div class="box">
-    <h3 id="mt" style="margin:0 0 6px">Add user</h3>
-    <label>Remark</label>
-    <input id="m_remark" placeholder="optional" />
-    <label>Expiry (days, 0 = never)</label>
-    <input id="m_days" type="number" value="30" />
-    <label>Data limit (GB, 0 = unlimited)</label>
-    <input id="m_gb" type="number" value="0" />
+    <h3>New user</h3>
+    <div class="field"><label>Remark</label><input id="m-remark" placeholder="e.g. amir-mobile" /></div>
+    <div class="grid2" style="margin-top:12px">
+      <div class="field"><label>Expiry (days)</label><input id="m-days" type="number" value="30" min="0" /></div>
+      <div class="field"><label>Data limit (GB)</label><input id="m-gb" type="number" value="0" min="0" step="0.1" /></div>
+    </div>
     <div class="actions">
-      <button class="ghost" id="m_cancel">Cancel</button>
-      <button id="m_ok">Save</button>
+      <button class="btn ghost" id="m-cancel">Cancel</button>
+      <button class="btn primary" id="m-ok">Create</button>
     </div>
   </div>
 </div>
 
+<!-- COMMAND PALETTE -->
+<div class="palette" id="palette">
+  <div class="box">
+    <input id="cmd-input" placeholder="Type a command…  (add / stats / theme / search)" />
+    <div class="res" id="cmd-res"></div>
+  </div>
+</div>
+
+<div class="toasts" id="toasts"></div>
+
 <script>
 let TOKEN = new URLSearchParams(location.search).get('token') || localStorage.getItem('vless_token') || '';
-function api(p, opts={}) {
-  const h = { 'Content-Type':'application/json' };
+const $ = s => document.querySelector(s);
+const api = (p, opts = {}) => {
+  const h = { 'Content-Type': 'application/json' };
   if (TOKEN) h['Authorization'] = 'Bearer ' + TOKEN;
-  return fetch(p, { ...opts, headers:h }).then(r => {
+  return fetch(p, { ...opts, headers: h }).then(r => {
     if (r.status === 401) { setToken(); throw new Error('unauthorized'); }
     return r.json();
   });
-}
+};
 function setToken() {
   const t = prompt('Admin token:', TOKEN);
   if (t != null) { TOKEN = t.trim(); localStorage.setItem('vless_token', TOKEN); location.search = '?token=' + encodeURIComponent(TOKEN); }
 }
-function fmtBytes(b){ if(!b) return '0 B'; const u=['B','KB','MB','GB','TB']; const i=Math.floor(Math.log(b)/Math.log(1024)); return (b/Math.pow(1024,i)).toFixed(2)+' '+u[i]; }
-function fmtDate(ms){ if(!ms) return '—'; const d=new Date(ms); return d.toLocaleDateString()+' '+d.toLocaleTimeString().slice(0,5); }
-function rel(ms){ if(!ms) return 'never'; const s=(Date.now()-ms)/1000; if(s<60) return (s|0)+'s ago'; if(s<3600) return (s/60|0)+'m ago'; if(s<86400) return (s/3600|0)+'h ago'; return (s/86400|0)+'d ago'; }
+const GB = 1024 ** 3;
+const pct = (used, lim) => lim ? Math.min(100, (used / lim) * 100) : 0;
+const fmt = b => { if (!b) return '0 B'; const u = ['B','KB','MB','GB','TB']; const i = Math.floor(Math.log(b) / Math.log(1024)); return (b / 1024 ** i).toFixed(i ? 2 : 0) + ' ' + u[i]; };
+const rel = ms => { if (!ms) return 'never'; const s = (Date.now() - ms) / 1000; if (s < 60) return (s|0) + 's ago'; if (s < 3600) return (s/60|0) + 'm ago'; if (s < 86400) return (s/3600|0) + 'h ago'; return (s/86400|0) + 'd ago'; };
+const fmtDate = ms => ms ? new Date(ms).toLocaleDateString(undefined, { year:'numeric', month:'short', day:'numeric' }) : '—';
+const statusOf = u => !u.enabled ? 'disabled' : u.expired ? 'expired' : (u.dataLimit && u.used >= u.dataLimit) ? 'quota' : 'active';
+const statusLabel = { active:'Active', disabled:'Disabled', expired:'Expired', quota:'Quota hit' };
+
+let CACHE = [];
+let FILTER = 'all', Q = '';
+
+function toast(msg, kind) {
+  const el = document.createElement('div');
+  el.className = 'toast ' + (kind || 'ok');
+  el.innerHTML = (kind === 'err' ? '⚠️ ' : '✅ ') + msg;
+  $('#toasts').appendChild(el);
+  requestAnimationFrame(() => el.classList.add('show'));
+  setTimeout(() => { el.classList.remove('show'); setTimeout(() => el.remove(), 300); }, 2600);
+}
 
 async function load() {
-  document.getElementById('tok').textContent = TOKEN;
-  const users = await api('/api/users');
-  const stats = await api('/api/stats');
-  document.getElementById('cards').innerHTML = `
-    <div class="card"><div class="v">${stats.users}</div><div class="l">Users</div></div>
-    <div class="card"><div class="v">${stats.active}</div><div class="l">Active (60s)</div></div>
-    <div class="card"><div class="v">${fmtBytes(stats.totalTraffic)}</div><div class="l">Total traffic</div></div>
-    <div class="card"><div class="v">${stats.domain}</div><div class="l">Domain</div></div>`;
-  const rows = users.map(u => {
-    const status = !u.enabled ? '<span class="pill off">disabled</span>'
-      : u.expired ? '<span class="pill exp">expired</span>'
-      : u.remaining===0 && u.dataLimit ? '<span class="pill exp">quota</span>'
-      : '<span class="pill on">active</span>';
-    return `<tr>
-      <td>${u.remark || '<span style="color:var(--muted)">—</span>'}</td>
-      <td><code>${u.uuid}</code></td>
-      <td>${status}</td>
-      <td>${fmtBytes(u.used)}${u.dataLimit?(' / '+fmtBytes(u.dataLimit)):''}</td>
-      <td>${u.expiry?fmtDate(u.expiry):'never'}</td>
-      <td>${rel(u.lastSeen)}</td>
-      <td><button class="ghost" onclick="copyLink('${u.uuid}')">copy</button></td>
+  if (!TOKEN) { setToken(); return; }
+  $('#tok-side').textContent = TOKEN.slice(0, 8) + '…';
+  let users = [], stats;
+  try { [users, stats] = await Promise.all([api('/api/users'), api('/api/stats')]); }
+  catch (e) { return; }
+  CACHE = users;
+  renderCards(users, stats);
+  renderRows();
+  if (!$('#view-stats').classList.contains('hidden')) renderDist(users);
+}
+
+function renderCards(users, stats) {
+  const active = users.filter(u => u.enabled && !u.expired).length;
+  const cards = [
+    { k:'Users', v: users.length },
+    { k:'Active', v: active, sm:'/ ' + users.length },
+    { k:'Total traffic', v: fmt(stats.totalTraffic) },
+    { k:'Domain', v: stats.domain, mono:true },
+  ];
+  const html = cards.map(c => `<div class="stat"><div class="k">${c.k}</div><div class="v ${c.mono?'mono':''}">${c.v}${c.sm?` <small>${c.sm}</small>`:''}</div></div>`).join('');
+  $('#stat-cards').innerHTML = html;
+  $('#stat-cards-2').innerHTML = html;
+}
+
+function renderDist(users) {
+  const max = Math.max(1, ...users.map(u => u.used));
+  $('#dist').innerHTML = users.length ? users.map(u => {
+    const w = (u.used / max) * 100;
+    const p = u.dataLimit ? pct(u.used, u.dataLimit) : 0;
+    const cls = p > 90 ? 'bad' : p > 70 ? 'warn' : '';
+    return `<div style="margin-bottom:12px"><div style="display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:5px"><span>${u.remark||'<span style=color:var(--faint)>—</span>'}</span><span class="num" style="color:var(--muted)">${fmt(u.used)}</span></div><div class="bar ${cls}"><i style="width:${Math.max(w,2)}%"></i></div></div>`;
+  }).join('') : '<div class="empty">No data.</div>';
+}
+
+function filtered() {
+  return CACHE.filter(u => {
+    const st = statusOf(u);
+    if (FILTER === 'active' && st !== 'active') return false;
+    if (FILTER === 'expired' && st !== 'expired') return false;
+    if (FILTER === 'disabled' && st !== 'disabled') return false;
+    if (Q && !(u.remark || '').toLowerCase().includes(Q) && !u.uuid.toLowerCase().includes(Q)) return false;
+    return true;
+  });
+}
+
+function renderRows() {
+  const rows = filtered();
+  const body = $('#rows');
+  if (!rows.length) { body.innerHTML = ''; $('#empty').classList.remove('hidden'); return; }
+  $('#empty').classList.add('hidden');
+  body.innerHTML = rows.map(u => {
+    const st = statusOf(u);
+    const p = pct(u.used, u.dataLimit);
+    const cls = p > 90 ? 'bad' : p > 70 ? 'warn' : '';
+    const lim = u.dataLimit ? fmt(u.dataLimit) : '∞';
+    const exp = u.expiry ? (u.expired ? `<span style="color:var(--bad)">${fmtDate(u.expiry)}</span>` : fmtDate(u.expiry)) : 'never';
+    return `<tr data-uuid="${u.uuid}">
+      <td><div class="u-remark">${u.remark || '—'}</div><div class="u-uuid">${u.uuid}</div></td>
+      <td><span class="pill ${st}">${statusLabel[st]}</span></td>
+      <td><div class="usage"><div class="bar ${cls}"><i style="width:${u.dataLimit ? Math.max(p,2) : 2}%"></i></div><span class="lbl num">${fmt(u.used)}</span></div></td>
+      <td class="num">${fmt(u.up + u.down) === fmt(u.used) ? lim : lim}</td>
+      <td>${exp}</td>
+      <td style="color:var(--muted)">${rel(u.lastSeen)}</td>
       <td><div class="row-actions">
-        <button class="ghost" onclick="toggle('${u.uuid}',${u.enabled})">${u.enabled?'disable':'enable'}</button>
-        <button class="ghost" onclick="reset('${u.uuid}')">reset</button>
-        <button class="danger" onclick="del('${u.uuid}')">del</button>
+        <button class="btn sm" data-act="toggle" data-uuid="${u.uuid}">${u.enabled ? 'Disable' : 'Enable'}</button>
+        <button class="btn sm ghost" data-act="copy" data-uuid="${u.uuid}">Copy</button>
       </div></td>
     </tr>`;
   }).join('');
-  document.getElementById('rows').innerHTML = rows || '<tr><td colspan="8" style="color:var(--muted)">No users yet.</td></tr>';
 }
-function copyLink(uuid){ api('/sub/'+uuid+'?token='+TOKEN).then(r=>r.text()).then(t=>{ navigator.clipboard.writeText(atob(t)); alert('Subscription link copied'); }); }
-function toggle(uuid,enabled){ api('/api/users/'+uuid,{method:'PUT',body:JSON.stringify({enabled:!enabled})}).then(load); }
-function reset(uuid){ api('/api/users/'+uuid+'/reset',{method:'POST'}).then(load); }
-function del(uuid){ if(confirm('Delete user '+uuid+'?')) api('/api/users/'+uuid,{method:'DELETE'}).then(load); }
 
-let editing=null;
-document.getElementById('add').onclick=()=>openModal();
-document.getElementById('m_cancel').onclick=closeModal;
-document.getElementById('m_ok').onclick=()=>{
-  const body={ remark:document.getElementById('m_remark').value, days:+document.getElementById('m_days').value||0, gb:+document.getElementById('m_gb').value||0 };
-  api('/api/users',{method:'POST',body:JSON.stringify({remark:body.remark,expiryDays:body.days,dataLimitGB:body.gb})}).then(()=>{closeModal();load();});
+function openDrawer(uuid) {
+  const u = CACHE.find(x => x.uuid === uuid);
+  if (!u) return;
+  $('#d-title').textContent = u.remark || 'User';
+  const p = u.dataLimit ? pct(u.used, u.dataLimit) : 0;
+  const cls = p > 90 ? 'bad' : p > 70 ? 'warn' : '';
+  $('#d-body').innerHTML = `
+    <div class="kv">
+      <div class="k">UUID</div><div class="v">${u.uuid}</div>
+      <div class="k">Status</div><div class="v">${statusLabel[statusOf(u)]}</div>
+      <div class="k">Uploaded</div><div class="v">${fmt(u.up)}</div>
+      <div class="k">Downloaded</div><div class="v">${fmt(u.down)}</div>
+      <div class="k">Last seen</div><div class="v">${rel(u.lastSeen)}</div>
+      <div class="k">Created</div><div class="v">${fmtDate(u.created)}</div>
+    </div>
+    <div class="field"><label>Usage ${u.dataLimit ? fmt(u.used)+' / '+fmt(u.dataLimit) : fmt(u.used)+' / ∞'}</label>
+      <div class="bar ${cls}"><i style="width:${u.dataLimit ? Math.max(p,2) : 2}%"></i></div></div>
+    <div class="field"><label>Remark</label><input id="d-remark" value="${u.remark.replace(/"/g,'&quot;')}" /></div>
+    <div class="grid2">
+      <div class="field"><label>Expiry (days)</label><input id="d-days" type="number" min="0" value="${u.expiry ? Math.max(0, Math.ceil((u.expiry - Date.now())/86400000)) : 0}" /></div>
+      <div class="field"><label>Data limit (GB)</label><input id="d-gb" type="number" min="0" step="0.1" value="${u.dataLimitGB}" /></div>
+    </div>
+    <div class="field"><label>Enabled</label>
+      <select id="d-enabled"><option value="1" ${u.enabled?'selected':''}>Enabled</option><option value="0" ${u.enabled?'':'selected'}>Disabled</option></select>
+    </div>
+    <div class="field"><label>Subscription</label>
+      <div class="sublink">
+        <div class="row"><input id="d-sub" readonly value="${location.origin}/sub/${u.uuid}" /><button class="btn sm" id="d-copysub">Copy</button></div>
+        <div class="row"><input id="d-link" readonly value="${u.vless}" /><button class="btn sm" id="d-copyvm">vless</button></div>
+      </div>
+    </div>
+    <div class="row-actions"><button class="btn sm ghost" id="d-reset">Reset traffic</button></div>`;
+  $('#scrim').classList.add('show'); $('#drawer').classList.add('show');
+  $('#d-close').onclick = closeDrawer;
+  $('#d-copysub').onclick = () => { navigator.clipboard.writeText($('#d-sub').value); toast('Subscription URL copied'); };
+  $('#d-copyvm').onclick = () => { navigator.clipboard.writeText($('#d-link').value); toast('vless link copied'); };
+  $('#d-reset').onclick = async () => { await api('/api/users/'+u.uuid+'/reset', { method:'POST' }); toast('Traffic reset'); load(); };
+  $('#d-save').onclick = async () => {
+    try {
+      await api('/api/users/'+u.uuid, { method:'PUT', body: JSON.stringify({
+        remark: $('#d-remark').value, enabled: $('#d-enabled').value === '1',
+        expiryDays: +$('#d-days').value || 0, dataLimitGB: +$('#d-gb').value || 0 }) });
+      toast('Saved'); closeDrawer(); load();
+    } catch (e) { toast(e.message, 'err'); }
+  };
+  $('#d-del').onclick = async () => { if (confirm('Delete '+u.uuid+'?')) { await api('/api/users/'+u.uuid, { method:'DELETE' }); toast('Deleted'); closeDrawer(); load(); } };
+}
+function closeDrawer() { $('#scrim').classList.remove('show'); $('#drawer').classList.remove('show'); }
+
+// events
+$('#rows').addEventListener('click', e => {
+  const act = e.target.closest('[data-act]');
+  if (act) {
+    e.stopPropagation();
+    const u = CACHE.find(x => x.uuid === act.dataset.uuid);
+    if (act.dataset.act === 'toggle') api('/api/users/'+u.uuid, { method:'PUT', body: JSON.stringify({ enabled: !u.enabled }) }).then(load).then(()=>toast(u.enabled?'Disabled':'Enabled'));
+    if (act.dataset.act === 'copy') api('/sub/'+u.uuid).then(r=>r.text()).then(t=>{ navigator.clipboard.writeText(atob(t)); toast('Subscription copied'); });
+    return;
+  }
+  const tr = e.target.closest('tr[data-uuid]');
+  if (tr) openDrawer(tr.dataset.uuid);
+});
+$('#q').addEventListener('input', e => { Q = e.target.value.toLowerCase(); renderRows(); });
+$('#filter').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; [...e.currentTarget.children].forEach(x=>x.classList.remove('on')); b.classList.add('on'); FILTER = b.dataset.f; renderRows(); });
+$('#scrim').addEventListener('click', closeDrawer);
+
+function openModal() { $('#modal').classList.add('show'); setTimeout(()=>$('#m-remark').focus(), 50); }
+function closeModal() { $('#modal').classList.remove('show'); }
+$('#btn-add').onclick = openModal; $('#nav-add').onclick = openModal; $('#m-cancel').onclick = closeModal;
+$('#m-ok').onclick = async () => {
+  try {
+    await api('/api/users', { method:'POST', body: JSON.stringify({
+      remark: $('#m-remark').value, expiryDays: +$('#m-days').value || 0, dataLimitGB: +$('#m-gb').value || 0 }) });
+    closeModal(); toast('User created'); load();
+  } catch (e) { toast(e.message, 'err'); }
 };
-function openModal(){ document.getElementById('m').classList.add('show'); }
-function closeModal(){ document.getElementById('m').classList.remove('show'); }
-document.getElementById('refresh').onclick=load;
-document.getElementById('logout').onclick=setToken;
 
-// Quick add from toolbar
-document.getElementById('remark').addEventListener('keydown', e=>{ if(e.key==='Enter') quickAdd(); });
-function quickAdd(){ const r=document.getElementById('remark').value, d=+document.getElementById('days').value||0, g=+document.getElementById('gb').value||0; api('/api/users',{method:'POST',body:JSON.stringify({remark:r,expiryDays:d,dataLimitGB:g})}).then(()=>{document.getElementById('remark').value='';load();}); }
+// views
+function setView(v) {
+  document.querySelectorAll('.nav button[data-view]').forEach(b => b.classList.toggle('active', b.dataset.view === v));
+  $('#view-users').classList.toggle('hidden', v !== 'users');
+  $('#view-stats').classList.toggle('hidden', v !== 'stats');
+  $('#view-title').textContent = v === 'stats' ? 'Overview' : 'Users';
+  $('#view-sub').textContent = v === 'stats' ? 'Aggregate traffic and per-user distribution.' : 'Manage client access, quotas and traffic.';
+  if (v === 'stats') renderDist(CACHE);
+}
+document.querySelectorAll('.nav button[data-view]').forEach(b => b.onclick = () => setView(b.dataset.view));
+
+// theme
+function applyTheme(t){ document.documentElement.setAttribute('data-theme', t); localStorage.setItem('vless_theme', t); }
+$('#btn-theme').onclick = () => applyTheme(document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
+applyTheme(localStorage.getItem('vless_theme') || 'dark');
+
+// command palette
+const CMDS = [
+  { t:'Add user', run: openModal },
+  { t:'Go to Overview', run: () => setView('stats') },
+  { t:'Go to Users', run: () => setView('users') },
+  { t:'Toggle theme', run: () => $('#btn-theme').click() },
+  { t:'Refresh', run: load },
+];
+let cmdSel = 0;
+function openPalette(){ $('#palette').classList.add('show'); $('#cmd-input').value=''; cmdSel=0; renderCmd(''); setTimeout(()=>$('#cmd-input').focus(),30); }
+function renderCmd(qq){
+  const list = CMDS.filter(c => c.t.toLowerCase().includes(qq.toLowerCase()));
+  $('#cmd-res').innerHTML = list.map((c,i)=>`<div class="item ${i===cmdSel?'sel':''}" data-i="${i}">${c.t}</div>`).join('') || '<div class="item">No results</div>';
+  $('#cmd-res').querySelectorAll('.item').forEach(el=>el.onclick=()=>{ CMDS[+el.dataset.i].run(); closePalette(); });
+}
+function closePalette(){ $('#palette').classList.remove('show'); }
+$('#btn-cmd').onclick = openPalette;
+$('#cmd-input').addEventListener('input', e=>{ cmdSel=0; renderCmd(e.target.value); });
+$('#cmd-input').addEventListener('keydown', e=>{
+  if (e.key==='ArrowDown'){ cmdSel++; renderCmd($('#cmd-input').value); e.preventDefault(); }
+  if (e.key==='ArrowUp'){ cmdSel=Math.max(0,cmdSel-1); renderCmd($('#cmd-input').value); e.preventDefault(); }
+  if (e.key==='Enter'){ const list=CMDS.filter(c=>c.t.toLowerCase().includes($('#cmd-input').value.toLowerCase())); if(list[cmdSel]){ list[cmdSel].run(); closePalette(); } }
+  if (e.key==='Escape') closePalette();
+});
+$('#palette').addEventListener('click', e=>{ if(e.target.id==='palette') closePalette(); });
+document.addEventListener('keydown', e=>{
+  if ((e.metaKey||e.ctrlKey) && e.key.toLowerCase()==='k'){ e.preventDefault(); openPalette(); }
+});
 
 load();
-setInterval(()=>{ if(!document.hidden) load().catch(()=>{}); }, 8000);
+setInterval(() => { if (!document.hidden && TOKEN) load().catch(()=>{}); }, 6000);
 </script>
 </body>
 </html>

@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>nodejs-vless · Admin Panel</title>
+<style>
+  :root { --bg:#0f1115; --card:#181b22; --fg:#e6e8ec; --muted:#8b93a1; --accent:#3b82f6; --border:#262b34; --ok:#22c55e; --warn:#f59e0b; --bad:#ef4444; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial; background:var(--bg); color:var(--fg); }
+  header { padding:16px 20px; border-bottom:1px solid var(--border); display:flex; align-items:center; gap:12px; }
+  header h1 { font-size:16px; margin:0; font-weight:600; }
+  header .tok { font-size:12px; color:var(--muted); }
+  .wrap { padding:20px; max-width:1100px; margin:0 auto; }
+  .cards { display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:12px; margin-bottom:20px; }
+  .card { background:var(--card); border:1px solid var(--border); border-radius:12px; padding:14px; }
+  .card .v { font-size:22px; font-weight:700; }
+  .card .l { font-size:12px; color:var(--muted); margin-top:4px; }
+  .toolbar { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:14px; align-items:end; }
+  .toolbar input { background:#0b0d12; border:1px solid var(--border); color:var(--fg); padding:8px 10px; border-radius:8px; }
+  button { background:var(--accent); color:#fff; border:0; padding:8px 14px; border-radius:8px; cursor:pointer; font-weight:600; }
+  button.ghost { background:transparent; border:1px solid var(--border); color:var(--fg); }
+  button.danger { background:var(--bad); }
+  table { width:100%; border-collapse:collapse; background:var(--card); border:1px solid var(--border); border-radius:12px; overflow:hidden; }
+  th,td { text-align:left; padding:10px 12px; font-size:13px; border-bottom:1px solid var(--border); }
+  th { color:var(--muted); font-weight:600; }
+  tr:last-child td { border-bottom:0; }
+  .pill { display:inline-block; padding:2px 8px; border-radius:999px; font-size:11px; font-weight:600; }
+  .pill.on { background:rgba(34,197,94,.15); color:var(--ok); }
+  .pill.off { background:rgba(239,68,68,.15); color:var(--bad); }
+  .pill.exp { background:rgba(245,158,11,.15); color:var(--warn); }
+  code { background:#0b0d12; padding:2px 6px; border-radius:6px; font-size:12px; }
+  .row-actions { display:flex; gap:6px; }
+  .modal { position:fixed; inset:0; background:rgba(0,0,0,.55); display:none; align-items:center; justify-content:center; }
+  .modal.show { display:flex; }
+  .modal .box { background:var(--card); border:1px solid var(--border); border-radius:14px; padding:20px; width:380px; }
+  .modal label { display:block; font-size:12px; color:var(--muted); margin:10px 0 4px; }
+  .modal .box input { width:100%; }
+  .modal .actions { display:flex; gap:8px; justify-content:flex-end; margin-top:16px; }
+  .hidden { display:none; }
+</style>
+</head>
+<body>
+<header>
+  <h1>nodejs-vless</h1>
+  <span class="tok">Admin Token: <code id="tok"></code></span>
+  <span style="flex:1"></span>
+  <button class="ghost" id="logout">Set token</button>
+</header>
+<div class="wrap">
+  <div class="cards" id="cards"></div>
+  <div class="toolbar">
+    <button id="add">+ Add user</button>
+    <input id="remark" placeholder="remark" />
+    <input id="days" placeholder="expiry days" type="number" />
+    <input id="gb" placeholder="data limit GB" type="number" />
+    <button class="ghost" id="refresh">Refresh</button>
+  </div>
+  <table>
+    <thead><tr><th>Remark</th><th>UUID</th><th>Status</th><th>Traffic</th><th>Expiry</th><th>Last seen</th><th>Link</th><th></th></tr></thead>
+    <tbody id="rows"></tbody>
+  </table>
+</div>
+
+<div class="modal" id="m">
+  <div class="box">
+    <h3 id="mt" style="margin:0 0 6px">Add user</h3>
+    <label>Remark</label>
+    <input id="m_remark" placeholder="optional" />
+    <label>Expiry (days, 0 = never)</label>
+    <input id="m_days" type="number" value="30" />
+    <label>Data limit (GB, 0 = unlimited)</label>
+    <input id="m_gb" type="number" value="0" />
+    <div class="actions">
+      <button class="ghost" id="m_cancel">Cancel</button>
+      <button id="m_ok">Save</button>
+    </div>
+  </div>
+</div>
+
+<script>
+let TOKEN = new URLSearchParams(location.search).get('token') || localStorage.getItem('vless_token') || '';
+function api(p, opts={}) {
+  const h = { 'Content-Type':'application/json' };
+  if (TOKEN) h['Authorization'] = 'Bearer ' + TOKEN;
+  return fetch(p, { ...opts, headers:h }).then(r => {
+    if (r.status === 401) { setToken(); throw new Error('unauthorized'); }
+    return r.json();
+  });
+}
+function setToken() {
+  const t = prompt('Admin token:', TOKEN);
+  if (t != null) { TOKEN = t.trim(); localStorage.setItem('vless_token', TOKEN); location.search = '?token=' + encodeURIComponent(TOKEN); }
+}
+function fmtBytes(b){ if(!b) return '0 B'; const u=['B','KB','MB','GB','TB']; const i=Math.floor(Math.log(b)/Math.log(1024)); return (b/Math.pow(1024,i)).toFixed(2)+' '+u[i]; }
+function fmtDate(ms){ if(!ms) return '—'; const d=new Date(ms); return d.toLocaleDateString()+' '+d.toLocaleTimeString().slice(0,5); }
+function rel(ms){ if(!ms) return 'never'; const s=(Date.now()-ms)/1000; if(s<60) return (s|0)+'s ago'; if(s<3600) return (s/60|0)+'m ago'; if(s<86400) return (s/3600|0)+'h ago'; return (s/86400|0)+'d ago'; }
+
+async function load() {
+  document.getElementById('tok').textContent = TOKEN;
+  const users = await api('/api/users');
+  const stats = await api('/api/stats');
+  document.getElementById('cards').innerHTML = `
+    <div class="card"><div class="v">${stats.users}</div><div class="l">Users</div></div>
+    <div class="card"><div class="v">${stats.active}</div><div class="l">Active (60s)</div></div>
+    <div class="card"><div class="v">${fmtBytes(stats.totalTraffic)}</div><div class="l">Total traffic</div></div>
+    <div class="card"><div class="v">${stats.domain}</div><div class="l">Domain</div></div>`;
+  const rows = users.map(u => {
+    const status = !u.enabled ? '<span class="pill off">disabled</span>'
+      : u.expired ? '<span class="pill exp">expired</span>'
+      : u.remaining===0 && u.dataLimit ? '<span class="pill exp">quota</span>'
+      : '<span class="pill on">active</span>';
+    return `<tr>
+      <td>${u.remark || '<span style="color:var(--muted)">—</span>'}</td>
+      <td><code>${u.uuid}</code></td>
+      <td>${status}</td>
+      <td>${fmtBytes(u.used)}${u.dataLimit?(' / '+fmtBytes(u.dataLimit)):''}</td>
+      <td>${u.expiry?fmtDate(u.expiry):'never'}</td>
+      <td>${rel(u.lastSeen)}</td>
+      <td><button class="ghost" onclick="copyLink('${u.uuid}')">copy</button></td>
+      <td><div class="row-actions">
+        <button class="ghost" onclick="toggle('${u.uuid}',${u.enabled})">${u.enabled?'disable':'enable'}</button>
+        <button class="ghost" onclick="reset('${u.uuid}')">reset</button>
+        <button class="danger" onclick="del('${u.uuid}')">del</button>
+      </div></td>
+    </tr>`;
+  }).join('');
+  document.getElementById('rows').innerHTML = rows || '<tr><td colspan="8" style="color:var(--muted)">No users yet.</td></tr>';
+}
+function copyLink(uuid){ api('/sub/'+uuid+'?token='+TOKEN).then(r=>r.text()).then(t=>{ navigator.clipboard.writeText(atob(t)); alert('Subscription link copied'); }); }
+function toggle(uuid,enabled){ api('/api/users/'+uuid,{method:'PUT',body:JSON.stringify({enabled:!enabled})}).then(load); }
+function reset(uuid){ api('/api/users/'+uuid+'/reset',{method:'POST'}).then(load); }
+function del(uuid){ if(confirm('Delete user '+uuid+'?')) api('/api/users/'+uuid,{method:'DELETE'}).then(load); }
+
+let editing=null;
+document.getElementById('add').onclick=()=>openModal();
+document.getElementById('m_cancel').onclick=closeModal;
+document.getElementById('m_ok').onclick=()=>{
+  const body={ remark:document.getElementById('m_remark').value, days:+document.getElementById('m_days').value||0, gb:+document.getElementById('m_gb').value||0 };
+  api('/api/users',{method:'POST',body:JSON.stringify({remark:body.remark,expiryDays:body.days,dataLimitGB:body.gb})}).then(()=>{closeModal();load();});
+};
+function openModal(){ document.getElementById('m').classList.add('show'); }
+function closeModal(){ document.getElementById('m').classList.remove('show'); }
+document.getElementById('refresh').onclick=load;
+document.getElementById('logout').onclick=setToken;
+
+// Quick add from toolbar
+document.getElementById('remark').addEventListener('keydown', e=>{ if(e.key==='Enter') quickAdd(); });
+function quickAdd(){ const r=document.getElementById('remark').value, d=+document.getElementById('days').value||0, g=+document.getElementById('gb').value||0; api('/api/users',{method:'POST',body:JSON.stringify({remark:r,expiryDays:d,dataLimitGB:g})}).then(()=>{document.getElementById('remark').value='';load();}); }
+
+load();
+setInterval(()=>{ if(!document.hidden) load().catch(()=>{}); }, 8000);
+</script>
+</body>
+</html>

@@ -94,6 +94,22 @@ console.log('store: create / read / accounting');
   fs.unlinkSync(f);
 }
 
+console.log('store: persisted UUID lookup');
+{
+  const f = path.join(os.tmpdir(), `vless-store-reload-${Date.now()}.json`);
+  const initial = new Store(f);
+  const user = initial.create({ remark: 'persisted-user' });
+  initial.flush();
+
+  const reloaded = new Store(f);
+  ok('reloaded user resolves from dashed UUID', reloaded.get(user.uuid).remark === 'persisted-user');
+  ok('reloaded user resolves from undashed UUID', reloaded.get(user.uuid.replace(/-/g, '')).remark === 'persisted-user');
+  ok('reloaded user can be updated', reloaded.update(user.uuid, { enabled: false }).enabled === false);
+  ok('reloaded user can be deleted', reloaded.remove(user.uuid) === true);
+  reloaded.flush();
+  fs.unlinkSync(f);
+}
+
 console.log('HTTP server: auth + users + subscription');
 (async () => {
   // Point config at a temp data file via env before requiring app modules.

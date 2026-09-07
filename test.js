@@ -55,6 +55,12 @@ console.log('handshake parser');
   const hs2 = parseHandshake(buf2);
   ok('domain host parsed', hs2.host === 'example.com');
   ok('domain port parsed', hs2.port === 80);
+  assert.throws(() => parseHandshake(Buffer.from([1])), /truncated handshake/);
+  ok('truncated handshake rejected', true);
+  const udp = Buffer.from(buf);
+  udp[18] = 2;
+  assert.throws(() => parseHandshake(udp), /unsupported command/);
+  ok('non-TCP command rejected', true);
 }
 
 console.log('store: create / read / accounting');
@@ -122,6 +128,8 @@ console.log('HTTP server: auth + users + subscription');
 
   const noauth = await fetch(base + '/api/users');
   ok('api rejects missing token', noauth.status === 401);
+  const queryAuth = await fetch(base + '/api/users?token=test-token');
+  ok('api rejects URL token', queryAuth.status === 401);
 
   const created = await fetch(base + '/api/users', {
     method: 'POST', headers: { Authorization: 'Bearer test-token', 'Content-Type': 'application/json' },
@@ -131,6 +139,12 @@ console.log('HTTP server: auth + users + subscription');
   const bob = await created.json();
   ok('created user has vless link', bob.vless.startsWith('vless://'));
   ok('dataLimitGB serialized', bob.dataLimitGB === 5);
+
+  const invalid = await fetch(base + '/api/users', {
+    method: 'POST', headers: { Authorization: 'Bearer test-token', 'Content-Type': 'application/json' },
+    body: JSON.stringify({ dataLimitGB: -1 }),
+  });
+  ok('negative quota rejected', invalid.status === 400);
 
   const list = await (await fetch(base + '/api/users', { headers: { Authorization: 'Bearer test-token' } })).json();
   ok('list returns 1 user', list.length === 1);
@@ -154,7 +168,7 @@ console.log('HTTP server: auth + users + subscription');
 
   const stats = await (await fetch(base + '/api/stats', { headers: { Authorization: 'Bearer test-token' } })).json();
   ok('stats counts users', stats.users === 1);
-  ok('stats exposes token', stats.adminToken === 'test-token');
+  ok('stats does not expose token', !Object.hasOwn(stats, 'adminToken'));
 
   const del = await fetch(base + '/api/users/' + bob.uuid, { method: 'DELETE', headers: { Authorization: 'Bearer test-token' } });
   ok('delete user', del.status === 200);

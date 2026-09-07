@@ -25,8 +25,6 @@ const config = {
   // and persisted to <dataDir>/admin.token on first run.
   adminToken: env('ADMIN_TOKEN', ''),
   webPanel: env('WEB_PANEL', 'on') !== 'off',
-  // Legacy "run shell" feature. Off by default for security.
-  webShell: env('WEB_SHELL', 'off') === 'on',
   verbose: env('VERBOSE', 'off') === 'on',
   tls: {
     enabled: env('TLS', 'off') === 'on' || !!env('TLS_CERT'),
@@ -50,10 +48,10 @@ function resolveAdminToken() {
     const existing = fs.readFileSync(tokFile, 'utf8').trim();
     if (existing) { config.adminToken = existing; return existing; }
   } catch (_) { /* not generated yet */ }
-  const t = crypto.randomBytes(16).toString('hex');
+  const t = crypto.randomBytes(32).toString('hex');
   try {
     fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(tokFile, t);
+    fs.writeFileSync(tokFile, t, { mode: 0o600 });
   } catch (_) { /* best effort */ }
   config.adminToken = t;
   return t;

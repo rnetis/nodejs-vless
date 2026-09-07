@@ -10,7 +10,12 @@
  * @returns {{version:number, id:Buffer, command:number, host:string, port:number, offset:number}}
  */
 function parseHandshake(buf) {
+  if (!Buffer.isBuffer(buf)) throw new Error('handshake must be a buffer');
+  const need = n => {
+    if (offset + n > buf.length) throw new Error('truncated handshake');
+  };
   let offset = 0;
+  need(18);
   const version = buf.readUInt8(offset);
   offset += 1;
 
@@ -20,7 +25,9 @@ function parseHandshake(buf) {
   const optLen = buf.readUInt8(offset);
   offset += 1 + optLen;
 
+  need(4);
   const command = buf.readUInt8(offset);
+  if (command !== 1) throw new Error('unsupported command');
   offset += 1;
 
   const port = buf.readUInt16BE(offset);
@@ -31,13 +38,18 @@ function parseHandshake(buf) {
 
   let host;
   if (addressType === 1) {            // IPv4
+    need(4);
     host = Array.from(buf.subarray(offset, offset + 4)).join('.');
     offset += 4;
   } else if (addressType === 2) {     // DOMAIN
+    need(1);
     const len = buf.readUInt8(offset++);
+    if (len === 0) throw new Error('empty domain');
+    need(len);
     host = buf.subarray(offset, offset + len).toString();
     offset += len;
   } else if (addressType === 3) {     // IPv6
+    need(16);
     const segments = [];
     for (let i = 0; i < 8; i++) {
       segments.push(buf.readUInt16BE(offset).toString(16));

@@ -20,7 +20,9 @@ function bufToHex(buf) {
  * @param {import('./store').Store} store
  */
 function attachProxy(server, store) {
-  const wss = new WebSocketServer({ server });
+  // The first WebSocket message is a compact VLESS header; constrain all
+  // frames to keep unauthenticated clients from reserving excessive memory.
+  const wss = new WebSocketServer({ server, maxPayload: 1024 * 1024 });
   // uuid -> Set of active { ws, socket, close() }
   const active = new Map();
 

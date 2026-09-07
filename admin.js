@@ -13,15 +13,23 @@
  *   POST /api/users/:uuid/reset         -> reset traffic
  *   GET  /sub/:uuid                     -> subscription (base64 vless link)
  *
- * Auth: header `Authorization: Bearer <token>` or `?token=<token>`.
+ * Auth: `Authorization: Bearer <token>` header only.
  */
 const { config } = require('./config');
+const crypto = require('crypto');
 const { GB, daysToExpiry, isExpired, usedBytes, remainingBytes } = require('./store');
 
 function jres(res, code, obj) {
   const body = JSON.stringify(obj);
+  secureHeaders(res);
   res.writeHead(code, { 'Content-Type': 'application/json; charset=utf-8' });
   res.end(body);
+}
+
+function secureHeaders(res) {
+  res.setHeader('Cache-Control', 'no-store');
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('Referrer-Policy', 'no-referrer');
 }
 
 function readBody(req) {
@@ -42,9 +50,23 @@ function readBody(req) {
 function authed(req, parsedUrl) {
   const auth = req.headers['authorization'] || '';
   const m = auth.match(/^Bearer\s+(.+)$/i);
-  if (m && m[1].trim() === config.adminToken) return true;
-  const tok = parsedUrl.searchParams.get('token');
-  return tok === config.adminToken;
+  if (!m) return false;
+  const provided = Buffer.from(m[1].trim());
+  const expected = Buffer.from(config.adminToken);
+  return provided.length === expected.length && crypto.timingSafeEqual(provided, expected);
+}
+
+function numberInRange(value, { min = 0, max = Number.MAX_SAFE_INTEGER } = {}) {
+  return typeof value === 'number' && Number.isFinite(value) && value >= min && value <= max;
+}
+
+function validateUserInput(body) {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) throw new Error('body must be a JSON object');
+  if ('remark' in body && (typeof body.remark !== 'string' || body.remark.length > 256)) throw new Error('remark must be a string up to 256 characters');
+  if ('enabled' in body && typeof body.enabled !== 'boolean') throw new Error('enabled must be a boolean');
+  for (const key of ['expiry', 'expiryDays', 'dataLimit', 'dataLimitGB']) {
+    if (key in body && !numberInRange(body[key])) throw new Error(`${key} must be a non-negative finite number`);
+  }
 }
 
 /** Build a vless:// subscription link for a user (uses undashed hex UUID, as present in the wire handshake). */
@@ -88,7 +110,9 @@ function createAdminApi(store) {
     const pathname = parsedUrl.pathname;
 
     // Web panel (no auth needed to load the page; API calls require token).
-    if (pathname === '/panel' || pathname === '/panel/') {
+    if (config.webPanel && (pathname === '/panel' || pathname === '/panel/')) {
+      secureHeaders(res);
+      res.setHeader('Content-Security-Policy', "default-src 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'");
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
       res.end(PANEL_HTML);
       return true;
@@ -100,6 +124,7 @@ function createAdminApi(store) {
       const u = store.get(subMatch[1]);
       if (!u) { res.writeHead(404); res.end('not found'); return true; }
       const link = buildVlessLink(u);
+      secureHeaders(res);
       res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
       res.end(Buffer.from(link).toString('base64'));
       return true;
@@ -125,7 +150,6 @@ function createAdminApi(store) {
           totalDown: down,
           totalTraffic: up + down,
           domain: config.domain,
-          adminToken: config.adminToken,
         });
         return true;
       }
@@ -137,6 +161,7 @@ function createAdminApi(store) {
 
       if (pathname === '/api/users' && req.method === 'POST') {
         const b = await readBody(req);
+        validateUserInput(b);
         const opts = {
           remark: b.remark || '',
           enabled: b.enabled !== false,
@@ -158,6 +183,7 @@ function createAdminApi(store) {
         }
         if (req.method === 'PUT' || req.method === 'PATCH') {
           const b = await readBody(req);
+          validateUserInput(b);
           const patch = {};
           if ('remark' in b) patch.remark = b.remark;
           if ('enabled' in b) patch.enabled = b.enabled;

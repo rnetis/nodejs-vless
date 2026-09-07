@@ -49,7 +49,15 @@ class Store {
       const raw = fs.readFileSync(this.file, 'utf8');
       const arr = JSON.parse(raw);
       if (Array.isArray(arr)) {
-        for (const u of arr) this.users.set(u.uuid, u);
+        for (const u of arr) {
+          // Users are stored with a dashed UUID, while all lookups (including
+          // VLESS handshakes) use the undashed wire form.  Always use the
+          // normalized form as the Map key after a restart as well.
+          if (!u || typeof u.uuid !== 'string') continue;
+          const key = this._norm(u.uuid);
+          if (!/^[0-9a-f]{32}$/.test(key)) continue;
+          this.users.set(key, u);
+        }
       }
     } catch (_) { /* fresh start */ }
     this._loading = false;

@@ -25,7 +25,13 @@ function fmtBytes(b) {
 
 function resolveTarget(store, key) {
   if (!key) return null;
-  if (/^[0-9a-f-]{36}$/i.test(key)) return store.get(key) || null;
+  // /list shows a short UUID prefix, so accept that prefix when it identifies
+  // one user. Full dashed and undashed UUIDs are handled by Store#get.
+  if (/^[0-9a-f-]{32,36}$/i.test(key)) return store.get(key) || null;
+  if (/^[0-9a-f]{8,31}$/i.test(key)) {
+    const matches = store.list().filter(u => u.uuid.replace(/-/g, '').toLowerCase().startsWith(key.toLowerCase()));
+    if (matches.length === 1) return matches[0];
+  }
   return store.find(key);
 }
 
@@ -33,7 +39,8 @@ function buildVlessLink(user) {
   const domain = config.domain;
   const p = encodeURIComponent(config.path || '/');
   const remark = encodeURIComponent(user.remark || config.remarks);
-  return `vless://${user.uuid}@${domain}:443?encryption=none&security=tls&sni=${domain}&fp=chrome&type=ws&host=${domain}&path=${p}#${remark}`;
+  const uuidHex = String(user.uuid).replace(/-/g, '');
+  return `vless://${uuidHex}@${domain}:443?encryption=none&security=tls&sni=${domain}&fp=chrome&type=ws&host=${domain}&path=${p}#${remark}`;
 }
 
 function statusEmoji(u) {

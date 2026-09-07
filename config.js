@@ -12,6 +12,13 @@ function env(name, def) {
   return (v === undefined || v === '') ? def : v;
 }
 
+function adminTelegramIds() {
+  // Prefer the plural name, while retaining the original singular variable for
+  // existing deployments. Whitespace and duplicate IDs are ignored.
+  const value = env('ADMIN_TELEGRAM_IDS', env('ADMIN_TELEGRAM_ID', ''));
+  return [...new Set(value.split(',').map(id => id.trim()).filter(Boolean))];
+}
+
 const config = {
   host: env('HOST', '0.0.0.0'),
   port: parseInt(env('PORT', '3000'), 10),
@@ -34,7 +41,7 @@ const config = {
   telegram: {
     botToken: env('BOT_TOKEN', ''),
     // Comma separated list of chat ids allowed to control the bot.
-    adminIds: env('ADMIN_TELEGRAM_ID', '').split(',').map(s => s.trim()).filter(Boolean),
+    adminIds: adminTelegramIds(),
     pollInterval: parseInt(env('TG_POLL', '1500'), 10),
   },
 };
@@ -57,4 +64,4 @@ function resolveAdminToken() {
   return t;
 }
 
-module.exports = { config, env, resolveAdminToken };
+module.exports = { config, env, adminTelegramIds, resolveAdminToken };

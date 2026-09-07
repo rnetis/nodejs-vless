@@ -49,7 +49,7 @@ node app.js
 | `TLS` | Use TLS | `off` |
 | `TLS_CERT` / `TLS_KEY` | PEM cert/key paths (enables TLS) | — |
 | `BOT_TOKEN` | Telegram bot token (enables bot) | — |
-| `ADMIN_TELEGRAM_ID` | Comma-separated chat ids allowed to use the bot (required when `BOT_TOKEN` is set) | — |
+| `ADMIN_TELEGRAM_IDS` | Comma-separated chat IDs allowed to use the bot (required when `BOT_TOKEN` is set). `ADMIN_TELEGRAM_ID` remains supported for compatibility. | — |
 | `TG_POLL` | Bot long-poll interval (ms) | `1500` |
 
 ## 🚀 Run
@@ -58,7 +58,7 @@ node app.js
 PORT=3000 DOMAIN=your.domain.com \
 ADMIN_TOKEN=change-me \
 BOT_TOKEN=123456:ABC-your-token \
-ADMIN_TELEGRAM_ID=987654321 \
+ADMIN_TELEGRAM_IDS=987654321,123456789 \
 node app.js
 ```
 
@@ -96,7 +96,7 @@ vless://<uuid>@your.domain.com:443?encryption=none&security=tls&sni=your.domain.
 
 ## 🤖 Telegram bot
 
-Set `BOT_TOKEN` (and optionally `ADMIN_TELEGRAM_ID`). Commands:
+Set `BOT_TOKEN` and `ADMIN_TELEGRAM_IDS` to one or more comma-separated chat IDs. Commands:
 
 | Command | Action |
 | --- | --- |
@@ -110,8 +110,7 @@ Set `BOT_TOKEN` (and optionally `ADMIN_TELEGRAM_ID`). Commands:
 | `/reset <uuid|remark>` | Reset traffic counters |
 | `/info <uuid|remark>` | Show detail + `vless://` link |
 
-Only chat ids in `ADMIN_TELEGRAM_ID` may control the bot. To avoid accidentally
-exposing administrative controls, a configured bot is disabled when that list is empty.
+Only chat IDs in `ADMIN_TELEGRAM_IDS` may control the bot; every configured ID has the same administrative permissions. `ADMIN_TELEGRAM_ID` is still accepted for existing deployments. To avoid accidentally exposing administrative controls, a configured bot is disabled when that list is empty.
 
 ## 🔌 Admin REST API
 

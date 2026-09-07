@@ -12,12 +12,30 @@ const path = require('path');
 const http = require('http');
 const { parseHandshake, bufToUuid } = require('./handshake');
 const { Store, GB, daysToExpiry, isExpired, usedBytes, remainingBytes } = require('./store');
+const { adminTelegramIds } = require('./config');
 
 let passed = 0;
 function ok(name, cond) {
   assert.ok(cond, name);
   passed++;
   console.log('  ✓ ' + name);
+}
+
+console.log('Telegram admin configuration');
+{
+  const originalPlural = process.env.ADMIN_TELEGRAM_IDS;
+  const originalSingular = process.env.ADMIN_TELEGRAM_ID;
+  process.env.ADMIN_TELEGRAM_IDS = '1001, 1002,1001, , 1003 ';
+  ok('multiple Telegram admins are parsed and deduplicated',
+    JSON.stringify(adminTelegramIds()) === JSON.stringify(['1001', '1002', '1003']));
+  delete process.env.ADMIN_TELEGRAM_IDS;
+  process.env.ADMIN_TELEGRAM_ID = '2001,2002';
+  ok('legacy singular Telegram admin setting supports multiple admins',
+    JSON.stringify(adminTelegramIds()) === JSON.stringify(['2001', '2002']));
+  if (originalPlural === undefined) delete process.env.ADMIN_TELEGRAM_IDS;
+  else process.env.ADMIN_TELEGRAM_IDS = originalPlural;
+  if (originalSingular === undefined) delete process.env.ADMIN_TELEGRAM_ID;
+  else process.env.ADMIN_TELEGRAM_ID = originalSingular;
 }
 
 console.log('handshake parser');

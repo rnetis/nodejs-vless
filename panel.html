@@ -338,8 +338,11 @@
 <div class="toasts" id="toasts"></div>
 
 <script>
-let TOKEN = new URLSearchParams(location.search).get('token') || localStorage.getItem('vless_token') || '';
+let TOKEN = localStorage.getItem('vless_token') || '';
+// Never keep credentials in the URL: URLs leak via browser history, logs and referrers.
+if (location.search) history.replaceState(null, '', location.pathname + location.hash);
 const $ = s => document.querySelector(s);
+const esc = value => String(value == null ? '' : value).replace(/[&<>'"]/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', "'":'&#39;', '"':'&quot;' })[c]);
 const api = (p, opts = {}) => {
   const h = { 'Content-Type': 'application/json' };
   if (TOKEN) h['Authorization'] = 'Bearer ' + TOKEN;
@@ -350,7 +353,7 @@ const api = (p, opts = {}) => {
 };
 function setToken() {
   const t = prompt('Admin token:', TOKEN);
-  if (t != null) { TOKEN = t.trim(); localStorage.setItem('vless_token', TOKEN); location.search = '?token=' + encodeURIComponent(TOKEN); }
+  if (t != null) { TOKEN = t.trim(); localStorage.setItem('vless_token', TOKEN); load(); }
 }
 const GB = 1024 ** 3;
 const pct = (used, lim) => lim ? Math.min(100, (used / lim) * 100) : 0;
@@ -366,7 +369,7 @@ let FILTER = 'all', Q = '';
 function toast(msg, kind) {
   const el = document.createElement('div');
   el.className = 'toast ' + (kind || 'ok');
-  el.innerHTML = (kind === 'err' ? '⚠️ ' : '✅ ') + msg;
+  el.textContent = (kind === 'err' ? '⚠️ ' : '✅ ') + msg;
   $('#toasts').appendChild(el);
   requestAnimationFrame(() => el.classList.add('show'));
   setTimeout(() => { el.classList.remove('show'); setTimeout(() => el.remove(), 300); }, 2600);
@@ -390,7 +393,7 @@ function renderCards(users, stats) {
     { k:'Users', v: users.length },
     { k:'Active', v: active, sm:'/ ' + users.length },
     { k:'Total traffic', v: fmt(stats.totalTraffic) },
-    { k:'Domain', v: stats.domain, mono:true },
+    { k:'Domain', v: esc(stats.domain), mono:true },
   ];
   const html = cards.map(c => `<div class="stat"><div class="k">${c.k}</div><div class="v ${c.mono?'mono':''}">${c.v}${c.sm?` <small>${c.sm}</small>`:''}</div></div>`).join('');
   $('#stat-cards').innerHTML = html;
@@ -403,7 +406,7 @@ function renderDist(users) {
     const w = (u.used / max) * 100;
     const p = u.dataLimit ? pct(u.used, u.dataLimit) : 0;
     const cls = p > 90 ? 'bad' : p > 70 ? 'warn' : '';
-    return `<div style="margin-bottom:12px"><div style="display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:5px"><span>${u.remark||'<span style=color:var(--faint)>—</span>'}</span><span class="num" style="color:var(--muted)">${fmt(u.used)}</span></div><div class="bar ${cls}"><i style="width:${Math.max(w,2)}%"></i></div></div>`;
+    return `<div style="margin-bottom:12px"><div style="display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:5px"><span>${u.remark ? esc(u.remark) : '<span style=color:var(--faint)>—</span>'}</span><span class="num" style="color:var(--muted)">${fmt(u.used)}</span></div><div class="bar ${cls}"><i style="width:${Math.max(w,2)}%"></i></div></div>`;
   }).join('') : '<div class="empty">No data.</div>';
 }
 
@@ -430,7 +433,7 @@ function renderRows() {
     const lim = u.dataLimit ? fmt(u.dataLimit) : '∞';
     const exp = u.expiry ? (u.expired ? `<span style="color:var(--bad)">${fmtDate(u.expiry)}</span>` : fmtDate(u.expiry)) : 'never';
     return `<tr data-uuid="${u.uuid}">
-      <td><div class="u-remark">${u.remark || '—'}</div><div class="u-uuid">${u.uuid}</div></td>
+      <td><div class="u-remark">${u.remark ? esc(u.remark) : '—'}</div><div class="u-uuid">${u.uuid}</div></td>
       <td><span class="pill ${st}">${statusLabel[st]}</span></td>
       <td><div class="usage"><div class="bar ${cls}"><i style="width:${u.dataLimit ? Math.max(p,2) : 2}%"></i></div><span class="lbl num">${fmt(u.used)}</span></div></td>
       <td class="num">${fmt(u.up + u.down) === fmt(u.used) ? lim : lim}</td>
@@ -461,7 +464,7 @@ function openDrawer(uuid) {
     </div>
     <div class="field"><label>Usage ${u.dataLimit ? fmt(u.used)+' / '+fmt(u.dataLimit) : fmt(u.used)+' / ∞'}</label>
       <div class="bar ${cls}"><i style="width:${u.dataLimit ? Math.max(p,2) : 2}%"></i></div></div>
-    <div class="field"><label>Remark</label><input id="d-remark" value="${u.remark.replace(/"/g,'&quot;')}" /></div>
+    <div class="field"><label>Remark</label><input id="d-remark" value="${esc(u.remark)}" /></div>
     <div class="grid2">
       <div class="field"><label>Expiry (days)</label><input id="d-days" type="number" min="0" value="${u.expiry ? Math.max(0, Math.ceil((u.expiry - Date.now())/86400000)) : 0}" /></div>
       <div class="field"><label>Data limit (GB)</label><input id="d-gb" type="number" min="0" step="0.1" value="${u.dataLimitGB}" /></div>
@@ -472,7 +475,7 @@ function openDrawer(uuid) {
     <div class="field"><label>Subscription</label>
       <div class="sublink">
         <div class="row"><input id="d-sub" readonly value="${location.origin}/sub/${u.uuid}" /><button class="btn sm" id="d-copysub">Copy</button></div>
-        <div class="row"><input id="d-link" readonly value="${u.vless}" /><button class="btn sm" id="d-copyvm">vless</button></div>
+        <div class="row"><input id="d-link" readonly value="${esc(u.vless)}" /><button class="btn sm" id="d-copyvm">vless</button></div>
       </div>
     </div>
     <div class="row-actions"><button class="btn sm ghost" id="d-reset">Reset traffic</button></div>`;

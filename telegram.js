@@ -58,13 +58,16 @@ async function send(chatId, text) {
 }
 
 function allowed(chatId) {
-  if (config.telegram.adminIds.length === 0) return true; // open if no ids configured
   return config.telegram.adminIds.includes(String(chatId));
 }
 
 function start(store) {
   if (!config.telegram.botToken) {
     console.log('[telegram] no BOT_TOKEN configured, bot disabled.');
+    return { stop() {} };
+  }
+  if (config.telegram.adminIds.length === 0) {
+    console.error('[telegram] BOT_TOKEN is set but ADMIN_TELEGRAM_ID is empty; bot disabled.');
     return { stop() {} };
   }
 

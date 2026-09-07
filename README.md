@@ -46,11 +46,10 @@ node app.js
 | `DATA_FILE` | User database JSON path | `./data/users.json` |
 | `ADMIN_TOKEN` | Master token for API + panel. Empty ⇒ auto-generated & saved to `<dataDir>/admin.token` | auto |
 | `WEB_PANEL` | Show web panel (`on`/`off`) | `on` |
-| `WEB_SHELL` | Legacy shell runner (`on`/`off`) | `off` |
 | `TLS` | Use TLS | `off` |
 | `TLS_CERT` / `TLS_KEY` | PEM cert/key paths (enables TLS) | — |
 | `BOT_TOKEN` | Telegram bot token (enables bot) | — |
-| `ADMIN_TELEGRAM_ID` | Comma-separated chat ids allowed to use the bot | all if empty |
+| `ADMIN_TELEGRAM_ID` | Comma-separated chat ids allowed to use the bot (required when `BOT_TOKEN` is set) | — |
 | `TG_POLL` | Bot long-poll interval (ms) | `1500` |
 
 ## 🚀 Run
@@ -63,16 +62,17 @@ ADMIN_TELEGRAM_ID=987654321 \
 node app.js
 ```
 
-On first boot (if `ADMIN_TOKEN` is empty) a token is printed:
+On first boot (if `ADMIN_TOKEN` is empty), a 256-bit token is generated and
+saved with owner-only permissions at `<dataDir>/admin.token`:
 
 ```
-[nodejs-vless] admin token: a1b2c3…e9f0
-[nodejs-vless] panel:        http://your.domain.com:3000/panel?token=a1b2c3…e9f0
+cat ./data/admin.token
 ```
 
 ## 🖥 Web panel
 
-Open `/panel?token=<ADMIN_TOKEN>`. From there you can:
+Open `/panel` and enter the admin token when prompted. The panel stores it in
+browser local storage and sends it only in the `Authorization` header.
 
 - add a user (remark, expiry in days, data cap in GB),
 - copy its subscription link,
@@ -110,12 +110,14 @@ Set `BOT_TOKEN` (and optionally `ADMIN_TELEGRAM_ID`). Commands:
 | `/reset <uuid|remark>` | Reset traffic counters |
 | `/info <uuid|remark>` | Show detail + `vless://` link |
 
-Only chat ids in `ADMIN_TELEGRAM_ID` may control the bot (or everyone if unset).
+Only chat ids in `ADMIN_TELEGRAM_ID` may control the bot. To avoid accidentally
+exposing administrative controls, a configured bot is disabled when that list is empty.
 
 ## 🔌 Admin REST API
 
-All routes (except `/panel` and `/sub/:uuid`) require
-`Authorization: Bearer <ADMIN_TOKEN>` or `?token=<ADMIN_TOKEN>`.
+All API routes require `Authorization: Bearer <ADMIN_TOKEN>`. Tokens in URLs
+are deliberately not accepted because URLs can be retained in logs, browser
+history, and referrer headers.
 
 | Method | Path | Description |
 | --- | --- | --- |
@@ -137,8 +139,8 @@ node test.proxy.js       # real VLESS handshake + traffic accounting + expiry/di
 ## 🛡 Security notes
 
 - Change the default `ADMIN_TOKEN`; the API is powerful.
-- Keep `WEB_SHELL=off` unless you absolutely need it (it executes shell as the
-  node process user).
+- The legacy web-shell runner has been removed; do not expose arbitrary command
+  execution through this service.
 - Put the service behind a reverse proxy with TLS and firewall the ports.
 
 ## 📜 License
